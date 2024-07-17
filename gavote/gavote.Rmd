@@ -1,0 +1,94 @@
+---
+title: "stat_for_interest"
+output: html_document
+date: "2024-07-17"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+```{r}
+# Georgia Vote
+library(faraway)
+data(gavote)
+help(gavote)
+dim(gavote)
+head(gavote)
+
+gavote$undercount <- (gavote$ballots-gavote$votes)/gavote$ballots
+summary(gavote$undercount)
+```
+
+```{r}
+# EDA through visualisation
+hist(gavote$undercount)
+plot(density(gavote$undercount)); rug(gavote$undercount)
+
+pie(table(gavote$equip))
+
+gavote$pergore <- gavote$gore / gavote$votes
+gavote$perbush <- gavote$bush / gavote$votes
+plot(pergore ~ perAA, gavote)
+
+# Saving to file
+# Open a PNG device
+png("pairwise_scatter.png", width = 1200, height = 800)
+
+pairs(gavote)
+# Close the device to save the file
+dev.off()
+
+plot(undercount~equip, gavote)
+
+xtabs(~ atlanta + rural, gavote)
+```
+
+```{r}
+# EDA 
+# correlation matrix
+cor(gavote[, c("perAA", "ballots", "undercount", "pergore", "perbush")])
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
