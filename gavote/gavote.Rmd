@@ -69,6 +69,179 @@ xtabs(~ atlanta + rural, gavote)
 # correlation matrix
 cor(gavote[, c("perAA", "ballots", "undercount", "pergore", "perbush")])
 ```
+Findings: perbush is negatively correlated with undercount while pergore is positively correlated with undercount
+meaning: 
+higher % of voters voting for bush, lower % of ballots will be undercount
+higher % of voters voting for gore, higher % of ballots will be undercount
+
+```{r}
+# Fitting a linear model to gavote
+lmod <- lm(undercount ~ pergore + perAA, gavote)
+
+lmod$coefficients
+lmod$fitted.values
+
+lmod$residuals
+# deviance is aka RSS (residual sum of squares)
+deviance(lmod)
+(lmodsum <- summary.lm(lmod)) # same as summary(lmod)
+attributes(lmodsum)
+lm.influence(lmod)
+```
+# To interpret results in summary.lm(model), or summary(model)
+
+## P-value 
+$$ Pr(>|t|) $$
+Tests the null hypothesis that the coefficient is zero (or that the predictor has no effect on the dependent variable)
+Smaller the p-value, less likely the coefficient is zero, more significant is the predictor
+
+## Residual standard error
+$$ \hat{\sigma} = \sqrt{\frac{RSS}{df}} $$ 
+Can be retrieved by `summary(model)$sigma`
+it is the standard deviation of the residuals.  
+it is in the unit of the dependent variable. 
+smaller: predicted value is closer to actual value. 
+
+## R-squared
+$$ R^2 = 1 - \frac{RSS}{TSS} $$
+It is the % of the variance explained (or 1 - % variance not explained)
+A measure of relative goodness of fit of the model
+It also equals the squared correlation between $\hat{y}$ and $y$
+
+## Adjusted R-squared 
+$$ R^2_a = 1 - \frac{RSS/(n-p)}{TSS/(n-1)} $$
+Can be used as a criterion for model selection
+
+# Qualitative variables / categorical variables
+```{r}
+options()$contrasts
+
+# contr.helmert()
+# contr.poly()
+# contr.sum()
+# contr.treatment()
+# contr.SAS()
+```
+contr.treatment encodes a factor by dummy variables, most interpretable in practice.  
+For a categorical variable with $k$ levels/categories, there will be $k-1$ dummy variables
+
+# Model with cross terms
+```{r}
+# centered pergore and perAA for ease of interpretation
+gavote$cpergore <- gavote$pergore - mean(gavote$pergore)
+gavote$cperAA <- gavote$perAA - mean(gavote$perAA)
+
+lmod2 <- lm(undercount ~ cperAA + cpergore * rural + equip, gavote)
+summary(lmod2)
+```
+
+## Interpretation of the model
+Given a (imaginary) county with average perAA and average pergore (that's the reason we centered these two variables before fitting the model), that is rural (default level of rural) and using LEVER (default level of equip), the predicted undercount% is 4.3297%, which is the Intercept. (The is the baseline prediction)
+
+# Collinearity
+remember that perAA and pergore (and thus cperAA and cpergore) are highly correlated so that when you include both of them in the model, they both are insignificant as indicated by a very high p-value.  
+Let me try only include one of these 2 (cperAA):  
+```{r}
+lmod3 <- lm(undercount ~ cperAA * rural + equip, gavote)
+summary(lmod3)
+```
+Suddenly cperAA becomes significant with a p value of 0.02.
+and the R-square of the smaller model is almost the same as the previous one (lmod2).
+
+# Testing the goodness-of-fit of a sub-model
+Hypothesis: the coefficients of the predictors removed (from the original model to get the sub-model) are 0, i.e. $H_0:\beta_{\Omega-\omega}=0$.  
+Test stat: F-statistic  
+$$ F = \frac{(RSS_\omega - RSS_\Omega) / (p-q)}{RSS_\Omega / (n-p))} \sim F_{p-q,n-p} $$
+This testing can be performed:
+```{r}
+anova(lmod3, lmod2)
+```
+p-value 0.8647, cannot reject null hypothesis. i.e. the predictor removed (cpergore) is not significant. The smaller model is as good. 
+
+# single predictor hypothesis testing 
+t-test, automatically performed in lm, printed in summary(model).  
+We usually avoid using the t-tests for a qualitative predictors with more than 2 levels.  
+
+## Comparing all sub-models with one less predictor
+```{r}
+drop1(lmod2, test = "F")
+```
+Notice *cpergore* and *usage* are not tested. This is because of the **hierarchy principle**, lower-order terms of an interaction be retained.  
+
+# Confidence Interval
+
+## For individual predictors
+```{r}
+confint(lmod3)
+```
+## For the prediction 
+or $\alpha^T \beta$) in general, can use esticon in doBy library
+```{r}
+library(doBy)
+esticon(lmod, L=c(1, 0.9, 0.9))
+```
+
+# Diagnostics
+Assumptions of linear model:
+1. $E(y) = X \beta$ is correct, i.e. it includes all the right variables and transforms and combines them correctly
+2. About $\epsilon$, the randomness part or the error term: all error terms have equal variance, are uncorrelated and have a normal distribution
+3. Outliers
+4. Influential points: 
+  - A large $h_i$ tends to make $Var(\hat{\epsilon}_i)$ small, the fit will be forced close to $y_i$
+  - Points on the boundary of the predictor space will have the most leverage
+
+Tools:  
+1. visualisation of residuals: versatile and informative and thus preferred
+2. hat matrix $H = X(X^TX)^{-1}X^T$
+  1. H is symmetric
+  2. H is idempotent
+  3. H projects $y$ to $\hat{y}$ (that's why it's called hat matrix)
+  4. H has dimension $n \times n$
+  5. $i_{th}$ row of H is the weight of each of the $y$ to reach $\hat{y_{i}}$; the diagonal entries of H is the sum of squares the entries in its rows $\rightarrow$ $h_{ii}$ or simply $h_{i}$, called hat value, summarizes the potential contribution of observation i to the fitted values collectively $\rightarrow$ $h_i$ is a suitable measure of leverage of the $i_{th}$ observation
+  6. average hat value is $p/n$, a hat value is noteworthy (i.e. has large leverage) if its value is 2 or 3 times of average
+  7. scaled residual: $r_i^* = \frac{r_i}{\sqrt{1-h_i}}$; $var(r_i^*) = \sigma^2$
+  8. estimation of $\sigma^2$: $\hat{\sigma}^2 = \frac{r^T r}{n-p}$ $\rightarrow$ $r_i^{(t)} = r_i^* / \hat{\sigma}$ is called $i_{th}$ standardized residual $\rightarrow$ 2nd one in the diagnostic plots
+3. case deletion measures: omitting an observation i and check the change in estimated coefficients, $\Delta_i(\hat{\beta}) = \hat{\beta} - \hat{\beta}_{(i)} = (X^TX)^{-1}x_ir_i / (1-h_{ii}) $ $\rightarrow$ larger $r_i$, larger $h_{ii}$, larger change in coefficient
+
+## Graphical diagnostic (visualisation)
+```{r}
+plot(lmod3)
+```
+1. 1st plot: raw residual vs. fitted values, check whether the residuals are zero mean, and variance is constant, and the linear assumption is correct
+  - if the (red) smoothed curve shows a curvilinear trend: linear assumption is probably violated (i.e. $ y = X \beta$). Solution: transformation of predictors
+2. QQ plot: assessment of normality
+  - linear trend: normality is fulfilled; skewness: transformation of the response 
+  - two tails diverging: long-tailed error, consider robust fitting methods
+  - normality assumption is not crucial for large datasets
+3. 3rd plot: doing this plot because we can double the resolution by doing absolute value, and address the skewness of $|\hat{\epsilon}|$ by doing square root. 
+4. Standardized residuals vs. leverage with Cook's distance contours (Cook's distance is a function of residual and leverage)
+  - Cook's distance $ D_i = \frac{(\hat{y} - \hat{y}_{(i)})^T (\hat{y} - \hat{y}_{(i)})}{p \hat{\sigma}^2} = \frac{\hat{\epsilon}^2_i}{p \hat{\sigma}^2} \frac{h_i}{(1-h_i)^2} $
+  - There are several points with quite high Cook distance, let's inspect them
+  
+```{r}
+plot(cooks.distance(lmod3))
+
+gavote[cooks.distance(lmod3) > 0.1, ]
+
+boxplot(gavote$undercount)
+```
+Combining different information:  
+Ben Hill and Randolph have a high Cook distance because or their huge residual (instead of because of their high leverage), and this is because of their extremely high undercount 
+
+### half-normal plot to detect extremely high leverages
+```{r}
+halfnorm(hatvalues(lmod3))
+# The plot shows extremely high values, in this case, row 103 and 131
+gavote[131, ] # Taliaferro
+gavote[103, ] # Montgomery
+table(gavote$equip)
+```
+Taliaferro and Montgomery are the only two counties using PAPER, so they are extremely influential (also at the edge of the predictor space). They are the two points at the far right of the 4th diagnostic plot. 
+
+
+
+
+
 
 
 
